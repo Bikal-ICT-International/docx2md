@@ -103,6 +103,32 @@ function syncScroll(fromEl, toEl, force) {
   });
 }
 
+function syncSelectionFromPreview() {
+  if (!els.preview || !els.editor) return;
+  
+  document.addEventListener("selectionchange", () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+    
+    const selectedText = selection.toString().trim();
+    if (!selectedText) return;
+    
+    // Check if selection is in preview area
+    const range = selection.getRangeAt(0);
+    if (!els.preview.contains(range.commonAncestorContainer)) return;
+    
+    // Find corresponding text in markdown editor
+    const mdText = els.editor.value;
+    const mdIndex = mdText.indexOf(selectedText);
+    
+    if (mdIndex !== -1) {
+      // Select the text in the editor
+      els.editor.focus();
+      els.editor.setSelectionRange(mdIndex, mdIndex + selectedText.length);
+    }
+  });
+}
+
 function wirePreviewImageSync() {
   if (!els.preview) return;
   const imgs = els.preview.querySelectorAll("img");
@@ -316,6 +342,9 @@ els.editor.addEventListener("input", (event) => {
 els.editor.addEventListener("scroll", () => {
   syncScroll(els.editor, els.preview);
 });
+
+// Initialize selection sync
+syncSelectionFromPreview();
 
 els.addImage.addEventListener("click", () => {
   if (els.imageFile) els.imageFile.click();
