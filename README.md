@@ -3,7 +3,7 @@
 Public DOCX ? Markdown converter with preview. Uses GitHub Actions for conversion and a Cloudflare Worker backend so users don't need a token.
 
 ## How it works
-- The web UI uploads your `.docx` to a temporary file host.
+- The web UI uploads your `.docx` to a temporary file host (tmp0.cc).
 - The Cloudflare Worker triggers a GitHub Actions workflow with that temp URL.
 - The workflow converts the file and uploads a zip artifact.
 - The Worker streams the artifact back to the browser.
