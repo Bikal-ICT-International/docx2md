@@ -1,6 +1,3 @@
-const WORKER_BASE = "https://docx2md.bikstudy.workers.dev";
-
-
 const els = {
   file: document.getElementById("file"),
   upload: document.getElementById("upload"),
@@ -17,25 +14,25 @@ const els = {
   fullscreenContent: document.getElementById("fullscreen-content"),
 };
 
+const WORKER_BASE = "https://docsconvert.bikstudy.workers.dev";
 const lastDispatchKey = "docx-md-last-dispatch";
 let mediaUrlMap = new Map();
 let mediaBlobUrls = [];
-let isSyncingScroll = false;
-let statusTimer = null;
-let statusAttempts = 0;
-const STATUS_POLL_MS = 5000;
-const STATUS_MAX_ATTEMPTS = 120;
+let lastRenderedMarkdown = "";
+let previewHeadingMap = [];
+let fullscreenHeadingMap = [];
+let syncRaf = null;
+let fullscreenSyncRaf = null;
+let previewSyncRaf = null;
+let isSyncingFromPreview = false;
+let isSyncingFromEditor = false;
+const smoothScroll = true;
+const smoothScrollThreshold = 240;
+let pendingImageSync = false;
 
 function setStatus(message) {
   const now = new Date().toLocaleTimeString();
   els.status.textContent = `[${now}] ${message}`;
-}
-
-function refreshButtons() {
-  const ready = WORKER_BASE && WORKER_BASE.startsWith("http");
-  els.upload.disabled = !ready || !els.file.files.length;
-  els.download.disabled = !ready;
-  els.check.disabled = !ready;
 }
 
 function revokeMediaUrls() {
@@ -57,43 +54,175 @@ function rewriteImageLinks(md) {
 
 function renderMarkdown(md) {
   if (!window.marked) {
-    if (els.preview) {
-      els.preview.textContent = "Markdown renderer not loaded.";
-    }
+    els.preview.textContent = "Markdown renderer not loaded.";
     return;
   }
   const rewritten = rewriteImageLinks(md);
   const html = window.marked.parse(rewritten);
-  if (els.preview) {
-    els.preview.innerHTML = html;
-    const imgs = els.preview.querySelectorAll("img");
-    imgs.forEach((img) => {
-      const src = img.getAttribute("src") || "";
-      const key = src.split(/[\\/]/).pop();
-      const mapped =
-        mediaUrlMap.get(src) || mediaUrlMap.get(key) || mediaUrlMap.get(decodeURIComponent(key));
-      if (mapped) {
-        img.src = mapped;
-      }
-    });
-  }
+  els.preview.innerHTML = html;
   if (els.fullscreenContent) {
     els.fullscreenContent.innerHTML = html;
   }
+  lastRenderedMarkdown = md;
+  previewHeadingMap = buildHeadingMap(md, els.preview);
+  if (els.fullscreenContent) {
+    fullscreenHeadingMap = buildHeadingMap(md, els.fullscreenContent);
+  }
+  syncPreviewToEditor();
+  wireImageLoadSync(els.preview, "preview");
+  if (els.fullscreenContent) {
+    wireImageLoadSync(els.fullscreenContent, "fullscreen");
+  }
 }
 
-function syncScroll(fromEl, toEl) {
-  if (!fromEl || !toEl) return;
-  if (isSyncingScroll) return;
-  const fromMax = fromEl.scrollHeight - fromEl.clientHeight;
-  const toMax = toEl.scrollHeight - toEl.clientHeight;
-  if (fromMax <= 0 || toMax <= 0) return;
-  const ratio = fromEl.scrollTop / fromMax;
-  isSyncingScroll = true;
-  toEl.scrollTop = ratio * toMax;
-  requestAnimationFrame(() => {
-    isSyncingScroll = false;
+function insertAtCursor(textarea, text) {
+  const start = textarea.selectionStart || 0;
+  const end = textarea.selectionEnd || 0;
+  const before = textarea.value.slice(0, start);
+  const after = textarea.value.slice(end);
+  textarea.value = `${before}${text}${after}`;
+  const caret = start + text.length;
+  textarea.setSelectionRange(caret, caret);
+}
+
+function extractMarkdownHeadings(md) {
+  const lines = md.split(/\r?\n/);
+  const headings = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const match = line.match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (!match) continue;
+    const text = match[2].replace(/\s+/g, " ").trim();
+    headings.push({ line: i, text });
+  }
+  return headings;
+}
+
+function buildHeadingMap(md, container) {
+  if (!container) return [];
+  const mdHeadings = extractMarkdownHeadings(md);
+  const renderedHeadings = Array.from(
+    container.querySelectorAll("h1, h2, h3, h4, h5, h6")
+  );
+  const count = Math.min(mdHeadings.length, renderedHeadings.length);
+  const map = [];
+  for (let i = 0; i < count; i += 1) {
+    map.push({ line: mdHeadings[i].line, el: renderedHeadings[i] });
+  }
+  return map;
+}
+
+function getCurrentEditorLine() {
+  const style = window.getComputedStyle(els.editor);
+  const lineHeight = Number.parseFloat(style.lineHeight) || 18;
+  return Math.max(0, Math.round(els.editor.scrollTop / lineHeight));
+}
+
+function syncPreviewToEditor() {
+  if (isSyncingFromPreview) return;
+  const activeFullscreen =
+    els.fullscreenOverlay && els.fullscreenOverlay.classList.contains("active");
+  const map = activeFullscreen ? fullscreenHeadingMap : previewHeadingMap;
+  const container = activeFullscreen ? els.fullscreenContent : els.preview;
+  if (!map.length || !container) return;
+
+  const line = getCurrentEditorLine();
+  let idx = 0;
+  for (let i = 0; i < map.length; i += 1) {
+    if (map[i].line <= line) {
+      idx = i;
+    } else {
+      break;
+    }
+  }
+  const target = map[idx].el;
+  if (!target) return;
+  const nextTop = Math.max(0, target.offsetTop - 8);
+  const distance = Math.abs(container.scrollTop - nextTop);
+  const shouldSmooth = smoothScroll && distance < smoothScrollThreshold;
+  isSyncingFromEditor = true;
+  if (shouldSmooth && typeof container.scrollTo === "function") {
+    container.scrollTo({ top: nextTop, behavior: "smooth" });
+  } else {
+    container.scrollTop = nextTop;
+  }
+  window.setTimeout(() => {
+    isSyncingFromEditor = false;
+  }, 120);
+}
+
+function wireImageLoadSync(container, tag) {
+  if (!container) return;
+  const images = Array.from(container.querySelectorAll("img"));
+  images.forEach((img) => {
+    if (img.dataset.syncBound === tag) return;
+    img.dataset.syncBound = tag;
+    if (!img.complete) {
+      img.addEventListener(
+        "load",
+        () => {
+          if (pendingImageSync) return;
+          pendingImageSync = true;
+          window.requestAnimationFrame(() => {
+            pendingImageSync = false;
+            if (lastRenderedMarkdown) {
+              previewHeadingMap = buildHeadingMap(lastRenderedMarkdown, els.preview);
+              if (els.fullscreenContent) {
+                fullscreenHeadingMap = buildHeadingMap(
+                  lastRenderedMarkdown,
+                  els.fullscreenContent
+                );
+              }
+            }
+            syncPreviewToEditor();
+          });
+        },
+        { once: true }
+      );
+    }
   });
+}
+
+function getClosestHeadingIndex(map, scrollTop) {
+  let idx = 0;
+  let best = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < map.length; i += 1) {
+    const distance = Math.abs(map[i].el.offsetTop - scrollTop);
+    if (distance < best) {
+      best = distance;
+      idx = i;
+    }
+  }
+  return idx;
+}
+
+function syncEditorToPreview(map, scrollTop) {
+  if (!map.length) return;
+  if (isSyncingFromEditor) return;
+  const idx = getClosestHeadingIndex(map, scrollTop);
+  const heading = map[idx];
+  if (!heading) return;
+  const style = window.getComputedStyle(els.editor);
+  const lineHeight = Number.parseFloat(style.lineHeight) || 18;
+  const targetTop = Math.max(0, heading.line * lineHeight);
+  const distance = Math.abs(els.editor.scrollTop - targetTop);
+  const shouldSmooth = smoothScroll && distance < smoothScrollThreshold;
+  isSyncingFromPreview = true;
+  if (shouldSmooth && typeof els.editor.scrollTo === "function") {
+    els.editor.scrollTo({ top: targetTop, behavior: "smooth" });
+  } else {
+    els.editor.scrollTop = targetTop;
+  }
+  window.setTimeout(() => {
+    isSyncingFromPreview = false;
+  }, 120);
+}
+
+function refreshButtons() {
+  const ready = WORKER_BASE && WORKER_BASE.startsWith("http");
+  els.upload.disabled = !ready || !els.file.files.length;
+  els.download.disabled = !ready;
+  els.check.disabled = !ready;
 }
 
 async function uploadDocx() {
@@ -116,19 +245,28 @@ async function uploadDocx() {
     uploadJson = null;
   }
   if (!uploadRes.ok) {
-    throw new Error((uploadJson && uploadJson.error) || rawText || "Upload failed");
+    throw new Error(
+      (uploadJson && uploadJson.error) ||
+        rawText ||
+        "Upload failed. Check your Worker URL."
+    );
   }
   if (!uploadJson || !uploadJson.ok) {
-    throw new Error((uploadJson && uploadJson.error) || rawText || "Upload failed");
+    throw new Error(
+      (uploadJson && uploadJson.error) ||
+        rawText ||
+        "Upload failed. Invalid Worker response."
+    );
   }
 
   localStorage.setItem(lastDispatchKey, String(Date.now()));
   setStatus("Upload complete. Conversion started.");
-  startStatusPolling();
 }
 
 async function downloadLatestArtifact() {
-  setStatus("Fetching latest artifact...");
+  const lastDispatch = Number(localStorage.getItem(lastDispatchKey) || "0");
+  setStatus("Finding latest completed run...");
+
   const dlRes = await fetch(`${WORKER_BASE}/artifact`);
   if (!dlRes.ok) {
     const text = await dlRes.text();
@@ -177,6 +315,7 @@ async function downloadLatestArtifact() {
   }
 
   const url = URL.createObjectURL(blob);
+
   const a = document.createElement("a");
   a.href = url;
   a.download = "markdown-and-media.zip";
@@ -189,7 +328,9 @@ async function downloadLatestArtifact() {
 }
 
 async function checkLatestRun() {
+  const lastDispatch = Number(localStorage.getItem(lastDispatchKey) || "0");
   setStatus("Checking workflow status...");
+
   const res = await fetch(`${WORKER_BASE}/status`);
   if (!res.ok) {
     setStatus("No status available yet.");
@@ -198,51 +339,8 @@ async function checkLatestRun() {
   const json = await res.json();
   const status = json.status || "unknown";
   const conclusion = json.conclusion || "pending";
-  setStatus(`Latest run status: ${status} (${conclusion}).`);
-}
-
-async function pollStatusOnce() {
-  const res = await fetch(`${WORKER_BASE}/status`);
-  if (!res.ok) {
-    setStatus("No status available yet.");
-    return false;
-  }
-  const json = await res.json();
-  const status = json.status || "unknown";
-  const conclusion = json.conclusion || "pending";
-  setStatus(`Latest run status: ${status} (${conclusion}).`);
-  if (status === "completed") {
-    return true;
-  }
-  return false;
-}
-
-function startStatusPolling() {
-  if (statusTimer) {
-    clearInterval(statusTimer);
-  }
-  statusAttempts = 0;
-  statusTimer = setInterval(async () => {
-    statusAttempts += 1;
-    const done = await pollStatusOnce();
-    if (done || statusAttempts >= STATUS_MAX_ATTEMPTS) {
-      clearInterval(statusTimer);
-      statusTimer = null;
-      if (!done) {
-        setStatus("Status polling stopped (timed out). Use Check status to refresh.");
-      }
-    }
-  }, STATUS_POLL_MS);
-}
-
-function insertAtCursor(textarea, text) {
-  const start = textarea.selectionStart || 0;
-  const end = textarea.selectionEnd || 0;
-  const before = textarea.value.slice(0, start);
-  const after = textarea.value.slice(end);
-  textarea.value = `${before}${text}${after}`;
-  const caret = start + text.length;
-  textarea.setSelectionRange(caret, caret);
+  const ageNote = lastDispatch ? "" : " (no recent upload)";
+  setStatus(`Latest run status: ${status} (${conclusion}).${ageNote}`);
 }
 
 els.file.addEventListener("change", refreshButtons);
@@ -259,13 +357,19 @@ els.check.addEventListener("click", () => {
   checkLatestRun().catch((err) => setStatus(err.message));
 });
 
+refreshButtons();
+setStatus("Ready.");
+
 els.editor.addEventListener("input", (event) => {
   renderMarkdown(event.target.value || "");
-  syncScroll(els.editor, els.preview);
 });
 
 els.editor.addEventListener("scroll", () => {
-  syncScroll(els.editor, els.preview);
+  if (syncRaf) return;
+  syncRaf = window.requestAnimationFrame(() => {
+    syncRaf = null;
+    syncPreviewToEditor();
+  });
 });
 
 els.addImage.addEventListener("click", () => {
@@ -290,8 +394,16 @@ els.imageFile.addEventListener("change", async (event) => {
 
 els.fullscreen.addEventListener("click", () => {
   if (!els.fullscreenOverlay) return;
+  if (els.fullscreenContent) {
+    els.fullscreenContent.innerHTML = els.preview.innerHTML;
+    fullscreenHeadingMap = buildHeadingMap(
+      lastRenderedMarkdown,
+      els.fullscreenContent
+    );
+  }
   els.fullscreenOverlay.classList.add("active");
   els.fullscreenOverlay.setAttribute("aria-hidden", "false");
+  syncPreviewToEditor();
 });
 
 els.exitFullscreen.addEventListener("click", () => {
@@ -300,7 +412,25 @@ els.exitFullscreen.addEventListener("click", () => {
   els.fullscreenOverlay.setAttribute("aria-hidden", "true");
 });
 
-refreshButtons();
-setStatus("Ready.");
+if (els.fullscreenContent) {
+  els.fullscreenContent.addEventListener("scroll", () => {
+    if (fullscreenSyncRaf) return;
+    fullscreenSyncRaf = window.requestAnimationFrame(() => {
+      fullscreenSyncRaf = null;
+      syncEditorToPreview(
+        fullscreenHeadingMap,
+        els.fullscreenContent.scrollTop
+      );
+    });
+  });
+}
 
-
+if (els.preview) {
+  els.preview.addEventListener("scroll", () => {
+    if (previewSyncRaf) return;
+    previewSyncRaf = window.requestAnimationFrame(() => {
+      previewSyncRaf = null;
+      syncEditorToPreview(previewHeadingMap, els.preview.scrollTop);
+    });
+  });
+}
