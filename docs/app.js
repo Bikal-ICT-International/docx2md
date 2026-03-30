@@ -20,6 +20,7 @@ const els = {
 const lastDispatchKey = "docx-md-last-dispatch";
 let mediaUrlMap = new Map();
 let mediaBlobUrls = [];
+let isSyncingScroll = false;
 
 function setStatus(message) {
   const now = new Date().toLocaleTimeString();
@@ -65,6 +66,20 @@ function renderMarkdown(md) {
   if (els.fullscreenContent) {
     els.fullscreenContent.innerHTML = html;
   }
+}
+
+function syncScroll(fromEl, toEl) {
+  if (!fromEl || !toEl) return;
+  if (isSyncingScroll) return;
+  const fromMax = fromEl.scrollHeight - fromEl.clientHeight;
+  const toMax = toEl.scrollHeight - toEl.clientHeight;
+  if (fromMax <= 0 || toMax <= 0) return;
+  const ratio = fromEl.scrollTop / fromMax;
+  isSyncingScroll = true;
+  toEl.scrollTop = ratio * toMax;
+  requestAnimationFrame(() => {
+    isSyncingScroll = false;
+  });
 }
 
 async function uploadDocx() {
@@ -197,6 +212,14 @@ els.check.addEventListener("click", () => {
 
 els.editor.addEventListener("input", (event) => {
   renderMarkdown(event.target.value || "");
+});
+
+els.editor.addEventListener("scroll", () => {
+  syncScroll(els.editor, els.preview);
+});
+
+els.preview.addEventListener("scroll", () => {
+  syncScroll(els.preview, els.editor);
 });
 
 els.addImage.addEventListener("click", () => {
