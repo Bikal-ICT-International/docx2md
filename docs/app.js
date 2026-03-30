@@ -25,6 +25,7 @@ let statusTimer = null;
 let statusAttempts = 0;
 const STATUS_POLL_MS = 5000;
 const STATUS_MAX_ATTEMPTS = 120;
+let pendingImageSync = false;
 
 function setStatus(message) {
   const now = new Date().toLocaleTimeString();
@@ -76,23 +77,56 @@ function renderMarkdown(md) {
         img.src = mapped;
       }
     });
+    syncScroll(els.editor, els.preview, true);
+    wirePreviewImageSync();
   }
   if (els.fullscreenContent) {
     els.fullscreenContent.innerHTML = html;
   }
 }
 
-function syncScroll(fromEl, toEl) {
+function syncScroll(fromEl, toEl, force) {
   if (!fromEl || !toEl) return;
   if (isSyncingScroll) return;
   const fromMax = fromEl.scrollHeight - fromEl.clientHeight;
   const toMax = toEl.scrollHeight - toEl.clientHeight;
-  if (fromMax <= 0 || toMax <= 0) return;
+  if (fromMax <= 0 || toMax <= 0) {
+    if (force) {
+      isSyncingScroll = true;
+      toEl.scrollTop = 0;
+      requestAnimationFrame(() => {
+        isSyncingScroll = false;
+      });
+    }
+    return;
+  }
   const ratio = fromEl.scrollTop / fromMax;
   isSyncingScroll = true;
   toEl.scrollTop = ratio * toMax;
   requestAnimationFrame(() => {
     isSyncingScroll = false;
+  });
+}
+
+function wirePreviewImageSync() {
+  if (!els.preview) return;
+  const imgs = els.preview.querySelectorAll("img");
+  imgs.forEach((img) => {
+    if (img.dataset.syncBound === "1") return;
+    img.dataset.syncBound = "1";
+    if (img.complete) return;
+    img.addEventListener(
+      "load",
+      () => {
+        if (pendingImageSync) return;
+        pendingImageSync = true;
+        requestAnimationFrame(() => {
+          pendingImageSync = false;
+          syncScroll(els.editor, els.preview, true);
+        });
+      },
+      { once: true }
+    );
   });
 }
 
