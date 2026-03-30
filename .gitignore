@@ -1,0 +1,8 @@
+# Local artifacts and files
+/media/
+/input/
+/output/
+
+# OS
+.DS_Store
+Thumbs.db

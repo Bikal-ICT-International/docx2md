@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DOCX to Markdown Converter</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header>
+        <h1>DOCX to Markdown</h1>
+        <p class="sub">Upload a .docx and download a Markdown + media zip from GitHub Actions.</p>
+      </header>
+
+      <section class="card">
+        <h2>1. Connect to GitHub</h2>
+        <div class="grid">
+          <label>
+            Repo owner
+            <input id="owner" type="text" placeholder="Bikal-ICT-International" />
+          </label>
+          <label>
+            Repo name
+            <input id="repo" type="text" placeholder="docx2md" />
+          </label>
+          <label>
+            Branch
+            <input id="branch" type="text" placeholder="main" />
+          </label>
+          <label>
+            GitHub token
+            <input id="token" type="password" placeholder="ghp_..." />
+          </label>
+        </div>
+        <div class="row">
+          <button id="save">Save</button>
+          <button id="clear" class="ghost">Clear</button>
+        </div>
+        <p class="hint">Token permissions: Actions (read/write). Fine-grained PAT recommended.</p>
+      </section>
+
+      <section class="card">
+        <h2>2. Upload DOCX</h2>
+        <input id="file" type="file" accept=".docx" />
+        <div class="row">
+          <button id="upload" disabled>Upload</button>
+        </div>
+        <p class="hint">Uploads to a temporary file host and triggers conversion. No files are committed to the repo.</p>
+      </section>
+
+      <section class="card">
+        <h2>3. Download output</h2>
+        <div class="row">
+          <button id="download" disabled>Download latest artifact</button>
+          <button id="check" class="ghost" disabled>Check status</button>
+        </div>
+        <p class="hint">Downloads the most recent artifact zip and loads it into the editor.</p>
+      </section>
+
+      <section class="card">
+        <h2>4. Edit & Preview</h2>
+        <div class="editor-tools">
+          <button id="add-image" class="ghost">Add image</button>
+          <button id="fullscreen" class="ghost">Full screen preview</button>
+          <input id="image-file" type="file" accept="image/*" hidden />
+        </div>
+        <div class="editor-wrap">
+          <label class="editor-col">
+            Markdown
+            <textarea id="editor" rows="14" placeholder="Markdown will load here after download..."></textarea>
+          </label>
+          <div class="preview-col">
+            <div class="preview-label">Preview</div>
+            <div id="preview" class="preview"></div>
+          </div>
+        </div>
+        <p class="hint">Edits update the preview instantly. Image links are resolved from the downloaded media files.</p>
+      </section>
+
+      <div id="fullscreen-overlay" class="fullscreen-overlay" aria-hidden="true">
+        <div class="fullscreen-bar">
+          <div class="fullscreen-title">Preview</div>
+          <button id="exit-fullscreen" class="ghost">Exit</button>
+        </div>
+        <div id="fullscreen-content" class="fullscreen-content"></div>
+      </div>
+
+      <section class="card">
+        <h2>Status</h2>
+        <pre id="status" class="status" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

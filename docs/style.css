@@ -1,0 +1,231 @@
+:root {
+  --bg: #f5f0e8;
+  --card: #fff9f1;
+  --ink: #1f1b17;
+  --muted: #6a5d52;
+  --accent: #8a5a2b;
+  --accent-2: #d2a46f;
+  --border: #e4d6c6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  color: var(--ink);
+  background: linear-gradient(180deg, #f9f3eb, #efe5d8 50%, #eadfce 100%);
+  min-height: 100vh;
+}
+
+.wrap {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 32px 32px 60px;
+}
+
+header h1 {
+  margin: 0 0 8px;
+  font-size: 36px;
+  letter-spacing: 0.5px;
+}
+
+.sub {
+  color: var(--muted);
+  margin: 0 0 24px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 18px 20px;
+  margin: 0 0 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+}
+
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+input[type="text"],
+input[type="password"] {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 14px;
+}
+
+input[type="file"] {
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.status {
+  background: #1f1b17;
+  color: #f5f0e8;
+  padding: 12px;
+  border-radius: 10px;
+  min-height: 80px;
+  white-space: pre-wrap;
+}
+
+.editor-wrap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.editor-tools {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 6px 0 10px;
+  flex-wrap: wrap;
+}
+
+.editor-col {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+textarea#editor {
+  width: 100%;
+  min-height: 320px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  background: #fff;
+  color: var(--ink);
+}
+
+.preview-col {
+  display: grid;
+  gap: 6px;
+}
+
+.preview-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.preview {
+  min-height: 320px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  overflow: auto;
+}
+
+.preview img {
+  max-width: 100%;
+  height: auto;
+}
+
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 14, 12, 0.92);
+  display: none;
+  flex-direction: column;
+  z-index: 9999;
+}
+
+.fullscreen-overlay.active {
+  display: flex;
+}
+
+.fullscreen-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: #1f1b17;
+  color: #f5f0e8;
+  border-bottom: 1px solid #2c2622;
+}
+
+.fullscreen-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.fullscreen-content {
+  flex: 1;
+  overflow: auto;
+  padding: 24px;
+  background: #fff;
+  margin: 18px;
+  border-radius: 12px;
+}
+
+.fullscreen-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 720px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .editor-wrap {
+    grid-template-columns: 1fr;
+  }
+  .wrap {
+    padding: 24px 16px 48px;
+  }
+}

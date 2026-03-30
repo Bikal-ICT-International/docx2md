@@ -1,0 +1,53 @@
+name: Convert DOCX to Markdown
+
+on:
+  workflow_dispatch:
+    inputs:
+      docx_url:
+        description: "Temporary URL to the uploaded .docx file"
+        required: true
+        type: string
+      docx_name:
+        description: "Original .docx file name"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install pandoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+
+      - name: Download DOCX
+        shell: bash
+        env:
+          DOCX_URL: ${{ inputs.docx_url }}
+          DOCX_NAME: ${{ inputs.docx_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p input
+          curl -L "$DOCX_URL" -o "input/$DOCX_NAME"
+
+      - name: Convert DOCX
+        shell: bash
+        env:
+          DOCX_NAME: ${{ inputs.docx_name }}
+        run: |
+          set -euo pipefail
+          base="$(basename "$DOCX_NAME" .docx)"
+          outdir="output/$base"
+          mkdir -p "$outdir"
+          pandoc -t gfm --extract-media "$outdir/media" "input/$DOCX_NAME" -o "$outdir/$base.md"
+
+      - name: Upload outputs as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: markdown-and-media
+          path: output
