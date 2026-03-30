@@ -67,21 +67,13 @@ function renderMarkdown(md) {
   const html = window.marked.parse(rewritten);
   if (els.preview) {
     els.preview.innerHTML = html;
-    const imgs = els.preview.querySelectorAll("img");
-    imgs.forEach((img) => {
-      const src = img.getAttribute("src") || "";
-      const key = src.split(/[\\/]/).pop();
-      const mapped =
-        mediaUrlMap.get(src) || mediaUrlMap.get(key) || mediaUrlMap.get(decodeURIComponent(key));
-      if (mapped) {
-        img.src = mapped;
-      }
-    });
+    applyImageMap(els.preview);
     syncScroll(els.editor, els.preview, true);
     wirePreviewImageSync();
   }
   if (els.fullscreenContent) {
     els.fullscreenContent.innerHTML = html;
+    applyImageMap(els.fullscreenContent);
   }
 }
 
@@ -127,6 +119,20 @@ function wirePreviewImageSync() {
       },
       { once: true }
     );
+  });
+}
+
+function applyImageMap(container) {
+  if (!container) return;
+  const imgs = container.querySelectorAll("img");
+  imgs.forEach((img) => {
+    const src = img.getAttribute("src") || "";
+    const key = src.split(/[\\/]/).pop();
+    const mapped =
+      mediaUrlMap.get(src) || mediaUrlMap.get(key) || mediaUrlMap.get(decodeURIComponent(key));
+    if (mapped) {
+      img.src = mapped;
+    }
   });
 }
 
