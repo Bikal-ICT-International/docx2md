@@ -21,6 +21,10 @@ const lastDispatchKey = "docx-md-last-dispatch";
 let mediaUrlMap = new Map();
 let mediaBlobUrls = [];
 let isSyncingScroll = false;
+let statusTimer = null;
+let statusAttempts = 0;
+const STATUS_POLL_MS = 5000;
+const STATUS_MAX_ATTEMPTS = 120;
 
 function setStatus(message) {
   const now = new Date().toLocaleTimeString();
@@ -120,6 +124,7 @@ async function uploadDocx() {
 
   localStorage.setItem(lastDispatchKey, String(Date.now()));
   setStatus("Upload complete. Conversion started.");
+  startStatusPolling();
 }
 
 async function downloadLatestArtifact() {
@@ -194,6 +199,40 @@ async function checkLatestRun() {
   const status = json.status || "unknown";
   const conclusion = json.conclusion || "pending";
   setStatus(`Latest run status: ${status} (${conclusion}).`);
+}
+
+async function pollStatusOnce() {
+  const res = await fetch(`${WORKER_BASE}/status`);
+  if (!res.ok) {
+    setStatus("No status available yet.");
+    return false;
+  }
+  const json = await res.json();
+  const status = json.status || "unknown";
+  const conclusion = json.conclusion || "pending";
+  setStatus(`Latest run status: ${status} (${conclusion}).`);
+  if (status === "completed") {
+    return true;
+  }
+  return false;
+}
+
+function startStatusPolling() {
+  if (statusTimer) {
+    clearInterval(statusTimer);
+  }
+  statusAttempts = 0;
+  statusTimer = setInterval(async () => {
+    statusAttempts += 1;
+    const done = await pollStatusOnce();
+    if (done || statusAttempts >= STATUS_MAX_ATTEMPTS) {
+      clearInterval(statusTimer);
+      statusTimer = null;
+      if (!done) {
+        setStatus("Status polling stopped (timed out). Use Check status to refresh.");
+      }
+    }
+  }, STATUS_POLL_MS);
 }
 
 function insertAtCursor(textarea, text) {
