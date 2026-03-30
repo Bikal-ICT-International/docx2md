@@ -123,6 +123,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 2fr 3fr;
   gap: 14px;
+  height: 600px;
 }
 
 .editor-tools {
@@ -135,14 +136,17 @@ button:disabled {
 
 .editor-col {
   display: grid;
+  grid-template-rows: auto 1fr;
   gap: 6px;
   font-size: 14px;
   color: var(--muted);
+  height: 100%;
+  overflow: hidden;
 }
 
 textarea#editor {
   width: 100%;
-  min-height: 320px;
+  height: 100%;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -150,20 +154,26 @@ textarea#editor {
   font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   background: #fff;
   color: var(--ink);
+  overflow: auto;
+  resize: none;
 }
 
 .preview-col {
   display: grid;
+  grid-template-rows: auto 1fr;
   gap: 6px;
+  height: 100%;
+  overflow: hidden;
 }
 
 .preview-label {
   font-size: 14px;
   color: var(--muted);
+  flex-shrink: 0;
 }
 
 .preview {
-  min-height: 320px;
+  height: 100%;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 10px;
