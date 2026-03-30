@@ -23,17 +23,16 @@ export default {
 
         const fileForm = new FormData();
         fileForm.append("file", file, file.name || "upload.docx");
-        fileForm.append("expires", "1d");
-        const uploadRes = await fetch("https://tmp0.cc/api/v1/upload", {
+        const uploadRes = await fetch("https://tmpfiles.org/api/v1/upload", {
           method: "POST",
           body: fileForm,
         });
         const uploadJson = await uploadRes.json().catch(() => null);
-        const directUrl =
-          uploadJson?.directDownloadUrl ||
-          uploadJson?.fullUrl ||
-          (uploadJson?.url ? `https://tmp0.cc${uploadJson.url}` : null);
-        if (!uploadRes.ok || !uploadJson || !uploadJson.success || !directUrl) {
+        const pageUrl = uploadJson?.data?.url || uploadJson?.url || null;
+        const directUrl = pageUrl
+          ? pageUrl.replace("://tmpfiles.org/", "://tmpfiles.org/dl/")
+          : null;
+        if (!uploadRes.ok || !uploadJson || !directUrl) {
           return json({ ok: false, error: "Temporary upload failed" }, 502, corsHeaders);
         }
 
