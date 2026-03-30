@@ -23,7 +23,7 @@ Public DOCX ? Markdown converter with preview. Uses GitHub Actions for conversio
    - `GITHUB_TOKEN` = fine-grained PAT (Actions: read/write)
 4. Set the Worker URL in `docs/app.js`:
 ```
-const WORKER_BASE = "https://api.docx2md.your-domain.workers.dev";
+const WORKER_BASE = "https://docx2md.bikstudy.workers.dev";
 ```
 
 ## Notes
