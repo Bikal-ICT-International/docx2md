@@ -121,7 +121,7 @@ button:disabled {
 
 .editor-wrap {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  grid-template-columns: 2fr 3fr;
   gap: 14px;
 }
 
