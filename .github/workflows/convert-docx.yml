@@ -43,18 +43,27 @@ jobs:
           set -euo pipefail
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
-          mkdir -p "$outdir/images"
-          # Convert DOCX to markdown with image extraction
+          tmpdir="$outdir/tmp_media"
+          mkdir -p "$outdir"
+          
+          # Extract to temp folder (pandoc creates media/ subfolder automatically)
           pandoc -f docx -t gfm \
-            --extract-media="$outdir/images" \
+            --extract-media="$tmpdir" \
             "input/$DOCX_NAME" \
             -o "$outdir/$base.md"
           
+          # Move all images from tmp_media/media/ to images/
+          mkdir -p "$outdir/images"
+          if [ -d "$tmpdir/media" ]; then
+            mv "$tmpdir/media"/* "$outdir/images/" 2>/dev/null || true
+            rm -rf "$tmpdir"
+          fi
+          
           # Verify images were extracted
-          if [ ! -d "$outdir/images" ] || [ -z "$(ls -A $outdir/images 2>/dev/null)" ]; then
+          if [ -z "$(ls -A $outdir/images 2>/dev/null)" ]; then
             echo "Warning: No images were extracted from the DOCX file"
           else
-            echo "Images extracted successfully"
+            echo "Images extracted successfully to images/ folder"
           fi
 
       - name: Rename images to DDMMYY format
@@ -66,30 +75,40 @@ jobs:
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
           imgdir="$outdir/images"
+          mdfile="$outdir/$base.md"
           
           # Get today's date in DDMMYY format
           datestr=$(date +%d%m%y)
           counter=0
           
-          # Rename all images in images folder to imageDDMMYYNNN format
+          # First, fix all markdown image references to use images/ folder only
+          sed -i 's|!\[\([^]]*\)\]([^)]*media/\([^)]*\))|\![\1](images/\2)|g' "$mdfile" || true
+          sed -i 's|!\[\([^]]*\)\]([^)]*images/images/\([^)]*\))|\![\1](images/\2)|g' "$mdfile" || true
+          sed -i 's|<img src="[^"]*media/\([^"]*\)"|<img src="images/\1"|g' "$mdfile" || true
+          sed -i 's|<img src="[^"]*images/images/\([^"]*\)"|<img src="images/\1"|g' "$mdfile" || true
+          
+          # Now rename images and update references
           if [ -d "$imgdir" ]; then
+            # Create a temporary mapping file
             for file in "$imgdir"/*; do
               if [ -f "$file" ]; then
+                oldname=$(basename "$file")
                 ext="${file##*.}"
                 newname="image${datestr}$(printf %03d $counter).$ext"
-                mv "$file" "$imgdir/$newname"
                 
-                # Update markdown to reference new image name
-                oldname=$(basename "$file")
-                sed -i "s|$oldname|$newname|g" "$outdir/$base.md"
+                # Only rename if not already in correct format
+                if [[ ! "$oldname" =~ ^image[0-9]{6}[0-9]{3}\. ]]; then
+                  # Rename file
+                  mv "$file" "$imgdir/$newname"
+                  
+                  # Update markdown references with old filename to new filename
+                  sed -i "s|$oldname|$newname|g" "$mdfile" || true
+                fi
                 
                 counter=$((counter + 1))
               fi
             done
           fi
-          
-          # Ensure all image references use images/ folder
-          sed -i 's|media/|images/|g' "$outdir/$base.md" || true
 
       - name: Upload outputs as artifact
         uses: actions/upload-artifact@v4
