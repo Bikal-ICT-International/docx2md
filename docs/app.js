@@ -261,14 +261,11 @@ els.check.addEventListener("click", () => {
 
 els.editor.addEventListener("input", (event) => {
   renderMarkdown(event.target.value || "");
+  syncScroll(els.editor, els.preview);
 });
 
 els.editor.addEventListener("scroll", () => {
   syncScroll(els.editor, els.preview);
-});
-
-els.preview.addEventListener("scroll", () => {
-  syncScroll(els.preview, els.editor);
 });
 
 els.addImage.addEventListener("click", () => {
