@@ -47,11 +47,14 @@ function revokeMediaUrls() {
 
 function rewriteImageLinks(md) {
   return md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, rawUrl) => {
-    const cleanUrl = rawUrl.trim().replace(/^["']|["']$/g, "");
-    const key = cleanUrl.split(/[\\/]/).pop();
+    let cleanUrl = rawUrl.trim().replace(/^["']|["']$/g, "");
+    // Normalize path to use images/ folder
+    const fileName = cleanUrl.split(/[\\/]/).pop();
+    cleanUrl = `images/${fileName}`;
+    const key = fileName;
     const mapped =
       mediaUrlMap.get(cleanUrl) || mediaUrlMap.get(key) || mediaUrlMap.get(decodeURIComponent(key));
-    if (!mapped) return match;
+    if (!mapped) return `![${alt}](${cleanUrl})`;
     return `![${alt}](${mapped})`;
   });
 }
@@ -126,12 +129,18 @@ function applyImageMap(container) {
   if (!container) return;
   const imgs = container.querySelectorAll("img");
   imgs.forEach((img) => {
-    const src = img.getAttribute("src") || "";
-    const key = src.split(/[\\/]/).pop();
+    let src = img.getAttribute("src") || "";
+    const fileName = src.split(/[\\/]/).pop();
+    // Normalize to images/ folder
+    let normalizedPath = `images/${fileName}`;
+    const key = fileName;
     const mapped =
-      mediaUrlMap.get(src) || mediaUrlMap.get(key) || mediaUrlMap.get(decodeURIComponent(key));
+      mediaUrlMap.get(normalizedPath) || mediaUrlMap.get(key) || mediaUrlMap.get(decodeURIComponent(key));
     if (mapped) {
       img.src = mapped;
+    } else {
+      // Fallback to normalized path
+      img.src = normalizedPath;
     }
   });
 }

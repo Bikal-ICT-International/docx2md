@@ -1,31 +1,25 @@
-# docx2md
+# docx2md (GitHub-only)
 
-Public DOCX ? Markdown converter with preview. Uses GitHub Actions for conversion and a Cloudflare Worker backend so users don't need a token.
+Convert Word `.docx` files to GitHub-flavored Markdown with extracted media, using only GitHub Pages + GitHub Actions. No local Pandoc required.
 
 ## How it works
-- The web UI uploads your `.docx` to a temporary file host (tmpfiles.org).
-- The Cloudflare Worker triggers a GitHub Actions workflow with that temp URL.
-- The workflow converts the file and uploads a zip artifact.
-- The Worker streams the artifact back to the browser.
+- The web UI uploads your `.docx` to a temporary file host (file.io).
+- The UI triggers a GitHub Actions workflow via API.
+- The workflow converts the file and uploads a zip artifact with Markdown + media.
+- The UI downloads and previews the artifact.
 
 ## GitHub Pages Setup
 1. Repo Settings -> Pages
 2. Source: `Deploy from a branch`
 3. Branch: `main` / `/docs`
 
-## Cloudflare Worker Setup
-1. Create a Worker and deploy `worker/index.js`.
-2. Add variables:
-   - `GITHUB_OWNER` = your GitHub org/user
-   - `GITHUB_REPO` = `docx2md`
-   - `GITHUB_BRANCH` = `main`
-3. Add secret:
-   - `GITHUB_TOKEN` = fine-grained PAT (Actions: read/write)
-4. Set the Worker URL in `docs/app.js`:
-```
-const WORKER_BASE = "https://docx2md.bikstudy.workers.dev";
-```
+## GitHub Token (required in the UI)
+Create a fine-grained PAT with:
+- Actions: Read and write
+- Contents: Read (optional)
+
+Enter the token in the UI when prompted.
 
 ## Notes
-- No files are committed to the repo.
-- The workflow runs on manual dispatch only.
+- The workflow runs only on manual dispatch.
+- Output is stored as an artifact.
