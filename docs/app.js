@@ -1,4 +1,4 @@
-const WORKER_BASE = "https://api.docx2md.your-domain.workers.dev";
+const WORKER_BASE = "https://api.docx2md.bikstudy.workers.dev";
 
 const els = {
   file: document.getElementById("file"),
