@@ -195,7 +195,7 @@ async function downloadLatestArtifact() {
       if (!entry.dir && path.toLowerCase().endsWith(".md") && !mdFile) {
         mdFile = entry;
       }
-      if (!entry.dir && path.toLowerCase().includes("/media/")) {
+      if (!entry.dir && path.toLowerCase().includes("/images/")) {
         const name = path.split("/").pop();
         mediaUrlMap.set(path, null);
         mediaUrlMap.set(name, null);
@@ -204,7 +204,7 @@ async function downloadLatestArtifact() {
 
     const mediaPromises = [];
     zip.forEach((path, entry) => {
-      if (!entry.dir && path.toLowerCase().includes("/media/")) {
+      if (!entry.dir && path.toLowerCase().includes("/images/")) {
         mediaPromises.push(
           entry.async("blob").then((fileBlob) => {
             const url = URL.createObjectURL(fileBlob);
