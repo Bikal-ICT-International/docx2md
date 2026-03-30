@@ -44,7 +44,8 @@ jobs:
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
           mkdir -p "$outdir"
-          pandoc -t gfm --extract-media "$outdir/images" "input/$DOCX_NAME" -o "$outdir/$base.md"          
+          pandoc -t gfm --extract-media "$outdir/images" "input/$DOCX_NAME" -o "$outdir/$base.md"
+
       - name: Update image paths in markdown
         shell: bash
         env:
@@ -53,10 +54,8 @@ jobs:
           set -euo pipefail
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
-          # Rename media folder to images
-          mv "$outdir/media" "$outdir/images"
-          # Update markdown to reference images folder
-          sed -i 's|!\[\([^]]*\)\](media/|\!\[\1](images/|g' "$outdir/$base.md"
+          # Update markdown to reference images folder (in case of any media/ references)
+          sed -i 's|media/|images/|g' "$outdir/$base.md" || true
       - name: Upload outputs as artifact
         uses: actions/upload-artifact@v4
         with:
