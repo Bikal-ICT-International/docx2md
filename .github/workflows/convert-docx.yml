@@ -46,7 +46,7 @@ jobs:
           mkdir -p "$outdir"
           pandoc -t gfm --extract-media "$outdir/images" "input/$DOCX_NAME" -o "$outdir/$base.md"
 
-      - name: Update image paths in markdown
+      - name: Rename images to DDMMYY format
         shell: bash
         env:
           DOCX_NAME: ${{ inputs.docx_name }}
@@ -54,8 +54,32 @@ jobs:
           set -euo pipefail
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
-          # Update markdown to reference images folder (in case of any media/ references)
+          imgdir="$outdir/images"
+          
+          # Get today's date in DDMMYY format
+          datestr=$(date +%d%m%y)
+          counter=0
+          
+          # Rename all images in images folder to imageDDMMYYNNN format
+          if [ -d "$imgdir" ]; then
+            for file in "$imgdir"/*; do
+              if [ -f "$file" ]; then
+                ext="${file##*.}"
+                newname="image${datestr}$(printf %03d $counter).$ext"
+                mv "$file" "$imgdir/$newname"
+                
+                # Update markdown to reference new image name
+                oldname=$(basename "$file")
+                sed -i "s|$oldname|$newname|g" "$outdir/$base.md"
+                
+                counter=$((counter + 1))
+              fi
+            done
+          fi
+          
+          # Ensure all image references use images/ folder
           sed -i 's|media/|images/|g' "$outdir/$base.md" || true
+
       - name: Upload outputs as artifact
         uses: actions/upload-artifact@v4
         with:
