@@ -1,5 +1,6 @@
 const WORKER_BASE = "https://docx2md.bikstudy.workers.dev";
 
+
 const els = {
   file: document.getElementById("file"),
   upload: document.getElementById("upload"),
@@ -228,3 +229,5 @@ els.exitFullscreen.addEventListener("click", () => {
 
 refreshButtons();
 setStatus("Ready.");
+
+
