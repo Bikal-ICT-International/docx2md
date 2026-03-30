@@ -1,0 +1,7 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "docx2md",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-03-30",
+  "workers_dev": true
+}
