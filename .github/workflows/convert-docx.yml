@@ -116,10 +116,13 @@ jobs:
             done
           fi
           
-          # Final cleanup of markdown references
+          # Final cleanup of markdown references - use relative paths for sibling folder
           if [ -f "$mdfile" ]; then
-            sed -i 's|media/|images/|g' "$mdfile"
-            sed -i 's|images/images/|images/|g' "$mdfile"
+            # Replace all absolute paths with relative paths (go up one level to access images/)
+            sed -i 's|output/[^/]*/tmp_images/|../images/|g' "$mdfile"
+            sed -i 's|output/[^/]*/images/|../images/|g' "$mdfile"
+            sed -i 's|media/|../images/|g' "$mdfile"
+            sed -i 's|../images/images/|../images/|g' "$mdfile"
           fi
           
           echo "Image processing complete"
