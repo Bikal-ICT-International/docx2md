@@ -43,17 +43,19 @@ jobs:
           set -euo pipefail
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
-          mkdir -p "$outdir"
-          # Use enhanced pandoc options to preserve layout, tables, and formatting
-          pandoc -t gfm \
-            --extract-media "$outdir/images" \
-            --from docx \
-            --wrap=preserve \
-            --preserve-tabs \
-            --tab-stop=4 \
-            --columns=100 \
+          mkdir -p "$outdir/images"
+          # Convert DOCX to markdown with image extraction
+          pandoc -f docx -t gfm \
+            --extract-media="$outdir/images" \
             "input/$DOCX_NAME" \
             -o "$outdir/$base.md"
+          
+          # Verify images were extracted
+          if [ ! -d "$outdir/images" ] || [ -z "$(ls -A $outdir/images 2>/dev/null)" ]; then
+            echo "Warning: No images were extracted from the DOCX file"
+          else
+            echo "Images extracted successfully"
+          fi
 
       - name: Rename images to DDMMYY format
         shell: bash
