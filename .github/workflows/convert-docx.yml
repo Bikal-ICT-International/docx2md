@@ -44,7 +44,16 @@ jobs:
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
           mkdir -p "$outdir"
-          pandoc -t gfm --extract-media "$outdir/images" "input/$DOCX_NAME" -o "$outdir/$base.md"
+          # Use enhanced pandoc options to preserve layout, tables, and formatting
+          pandoc -t gfm \
+            --extract-media "$outdir/images" \
+            --from docx \
+            --wrap=preserve \
+            --preserve-tabs \
+            --tab-stop=4 \
+            --columns=100 \
+            "input/$DOCX_NAME" \
+            -o "$outdir/$base.md"
 
       - name: Rename images to DDMMYY format
         shell: bash
