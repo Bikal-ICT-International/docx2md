@@ -103,6 +103,22 @@ function syncScroll(fromEl, toEl, force) {
   });
 }
 
+function setupScrollSync() {
+  // Sync editor scroll to preview
+  if (els.editor) {
+    els.editor.addEventListener("scroll", () => {
+      syncScroll(els.editor, els.preview);
+    });
+  }
+  
+  // Sync preview scroll back to editor
+  if (els.preview) {
+    els.preview.addEventListener("scroll", () => {
+      syncScroll(els.preview, els.editor);
+    });
+  }
+}
+
 function syncSelectionFromPreview() {
   if (!els.preview || !els.editor) return;
   
@@ -339,9 +355,8 @@ els.editor.addEventListener("input", (event) => {
   syncScroll(els.editor, els.preview);
 });
 
-els.editor.addEventListener("scroll", () => {
-  syncScroll(els.editor, els.preview);
-});
+// Setup bidirectional scroll sync
+setupScrollSync();
 
 // Initialize selection sync
 syncSelectionFromPreview();
