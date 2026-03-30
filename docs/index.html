@@ -23,16 +23,23 @@
       </section>
 
       <section class="card">
-        <h2>2. Download output</h2>
+        <h2>2. Check Conversion Status</h2>
+        <div class="row">
+          <button id="check" class="ghost" disabled>Check status</button>
+        </div>
+        <p class="hint">Monitors the GitHub Actions workflow and shows when conversion is complete.</p>
+      </section>
+
+      <section class="card">
+        <h2>3. Download output</h2>
         <div class="row">
           <button id="download" disabled>Download Markdown + Media (ZIP)</button>
-          <button id="check" class="ghost" disabled>Check status</button>
         </div>
         <p class="hint">Downloads the most recent converted artifact and loads it into the editor.</p>
       </section>
 
       <section class="card">
-        <h2>3. Edit & Preview</h2>
+        <h2>4. Edit & Preview</h2>
         <div class="editor-tools">
           <button id="add-image" class="ghost">Add image</button>
           <button id="fullscreen" class="ghost">Full screen preview</button>
