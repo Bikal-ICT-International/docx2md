@@ -81,34 +81,50 @@ jobs:
           datestr=$(date +%d%m%y)
           counter=0
           
-          # First, fix all markdown image references to use images/ folder only
-          sed -i 's|!\[\([^]]*\)\]([^)]*media/\([^)]*\))|\![\1](images/\2)|g' "$mdfile" || true
-          sed -i 's|!\[\([^]]*\)\]([^)]*images/images/\([^)]*\))|\![\1](images/\2)|g' "$mdfile" || true
-          sed -i 's|<img src="[^"]*media/\([^"]*\)"|<img src="images/\1"|g' "$mdfile" || true
-          sed -i 's|<img src="[^"]*images/images/\([^"]*\)"|<img src="images/\1"|g' "$mdfile" || true
+          echo "Processing images in: $imgdir"
+          echo "Markdown file: $mdfile"
           
-          # Now rename images and update references
+          # List current images
           if [ -d "$imgdir" ]; then
-            # Create a temporary mapping file
-            for file in "$imgdir"/*; do
-              if [ -f "$file" ]; then
-                oldname=$(basename "$file")
-                ext="${file##*.}"
-                newname="image${datestr}$(printf %03d $counter).$ext"
-                
-                # Only rename if not already in correct format
-                if [[ ! "$oldname" =~ ^image[0-9]{6}[0-9]{3}\. ]]; then
-                  # Rename file
-                  mv "$file" "$imgdir/$newname"
-                  
-                  # Update markdown references with old filename to new filename
-                  sed -i "s|$oldname|$newname|g" "$mdfile" || true
-                fi
-                
-                counter=$((counter + 1))
+            echo "Current images:"
+            ls -la "$imgdir" || echo "Error listing images"
+          else
+            echo "Images directory does not exist!"
+          fi
+          
+          # Process all images - rename and update markdown
+          if [ -d "$imgdir" ]; then
+            # Use find to handle all files safely
+            find "$imgdir" -maxdepth 1 -type f | sort | while read -r file; do
+              oldname=$(basename "$file")
+              ext="${file##*.}"
+              newname="image${datestr}$(printf %03d $counter).$ext"
+              
+              echo "Processing: $oldname -> $newname"
+              
+              # Rename the file
+              mv "$file" "$imgdir/$newname"
+              
+              # Update markdown - handle various formats
+              if [ -f "$mdfile" ]; then
+                sed -i "s|$oldname|$newname|g" "$mdfile"
+                sed -i "s|media/$oldname|$newname|g" "$mdfile"
+                sed -i "s|images/images/$oldname|$newname|g" "$mdfile"
               fi
+              
+              counter=$((counter + 1))
             done
           fi
+          
+          # Final cleanup of markdown references
+          if [ -f "$mdfile" ]; then
+            sed -i 's|media/|images/|g' "$mdfile"
+            sed -i 's|images/images/|images/|g' "$mdfile"
+          fi
+          
+          echo "Image processing complete"
+          echo "Final images:"
+          ls -la "$imgdir" 2>/dev/null || echo "No images in directory"
 
       - name: Upload outputs as artifact
         uses: actions/upload-artifact@v4
