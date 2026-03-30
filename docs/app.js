@@ -53,18 +53,14 @@ function rewriteImageLinks(md) {
 function renderMarkdown(md) {
   if (!window.marked) {
     if (els.preview) {
-      els.preview.value = "Markdown renderer not loaded.";
+      els.preview.textContent = "Markdown renderer not loaded.";
     }
     return;
   }
   const rewritten = rewriteImageLinks(md);
   const html = window.marked.parse(rewritten);
   if (els.preview) {
-    if ("value" in els.preview) {
-      els.preview.value = html;
-    } else {
-      els.preview.textContent = html;
-    }
+    els.preview.innerHTML = html;
   }
   if (els.fullscreenContent) {
     els.fullscreenContent.innerHTML = html;

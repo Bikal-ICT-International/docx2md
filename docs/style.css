@@ -171,16 +171,6 @@ textarea#editor {
   overflow: auto;
 }
 
-.html-output {
-  width: 100%;
-  min-height: 320px;
-  resize: vertical;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 13px;
-  color: var(--ink);
-  white-space: pre-wrap;
-}
-
 .preview img {
   max-width: 100%;
   height: auto;
