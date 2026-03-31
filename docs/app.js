@@ -21,6 +21,8 @@ const lastDispatchKey = "docx-md-last-dispatch";
 let mediaUrlMap = new Map();
 let mediaBlobUrls = [];
 let isSyncingScroll = false;
+let scrollSyncTimeout = null;
+let lastScrollSource = null;
 let statusTimer = null;
 let statusAttempts = 0;
 const STATUS_POLL_MS = 5000;
@@ -71,7 +73,6 @@ function renderMarkdown(md) {
   if (els.preview) {
     els.preview.innerHTML = html;
     applyImageMap(els.preview);
-    syncScroll(els.editor, els.preview, true);
     wirePreviewImageSync();
   }
   if (els.fullscreenContent) {
@@ -80,42 +81,64 @@ function renderMarkdown(md) {
   }
 }
 
-function syncScroll(fromEl, toEl, force) {
+function getHeadingsFromMarkdown(md) {
+  // Extract all headings and their approximate line positions
+  const lines = md.split('\n');
+  const headings = [];
+  let lineNum = 0;
+  lines.forEach((line, idx) => {
+    if (line.match(/^#+\s+/)) {
+      headings.push({ text: line.replace(/^#+\s+/, ''), lineNum: idx });
+    }
+  });
+  return headings;
+}
+
+function syncScroll(fromEl, toEl) {
   if (!fromEl || !toEl) return;
   if (isSyncingScroll) return;
+  
   const fromMax = fromEl.scrollHeight - fromEl.clientHeight;
   const toMax = toEl.scrollHeight - toEl.clientHeight;
-  if (fromMax <= 0 || toMax <= 0) {
-    if (force) {
-      isSyncingScroll = true;
-      toEl.scrollTop = 0;
-      requestAnimationFrame(() => {
-        isSyncingScroll = false;
-      });
-    }
-    return;
-  }
+  
+  if (fromMax <= 0 || toMax <= 0) return;
+  
+  // Use simple proportional sync to prevent jittering
   const ratio = fromEl.scrollTop / fromMax;
+  const targetScroll = ratio * toMax;
+  
   isSyncingScroll = true;
-  toEl.scrollTop = ratio * toMax;
-  requestAnimationFrame(() => {
+  toEl.scrollTop = targetScroll;
+  
+  // Reset flag after a safe delay
+  if (scrollSyncTimeout) clearTimeout(scrollSyncTimeout);
+  scrollSyncTimeout = setTimeout(() => {
     isSyncingScroll = false;
-  });
+    scrollSyncTimeout = null;
+  }, 50);
 }
 
 function setupScrollSync() {
+  // Debounced scroll handler to prevent jittering
+  const makeScrollHandler = (fromEl, toEl) => {
+    let scrollTimeout = null;
+    return () => {
+      if (scrollTimeout) clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        syncScroll(fromEl, toEl);
+        scrollTimeout = null;
+      }, 10);
+    };
+  };
+  
   // Sync editor scroll to preview
   if (els.editor) {
-    els.editor.addEventListener("scroll", () => {
-      syncScroll(els.editor, els.preview);
-    });
+    els.editor.addEventListener("scroll", makeScrollHandler(els.editor, els.preview), { passive: true });
   }
   
   // Sync preview scroll back to editor
   if (els.preview) {
-    els.preview.addEventListener("scroll", () => {
-      syncScroll(els.preview, els.editor);
-    });
+    els.preview.addEventListener("scroll", makeScrollHandler(els.preview, els.editor), { passive: true });
   }
 }
 
@@ -351,8 +374,8 @@ els.check.addEventListener("click", () => {
 });
 
 els.editor.addEventListener("input", (event) => {
-  renderMarkdown(event.target.value || "");
-  syncScroll(els.editor, els.preview);
+  const markdown = event.target.value || "";
+  renderMarkdown(markdown);
 });
 
 // Setup bidirectional scroll sync
