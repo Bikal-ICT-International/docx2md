@@ -104,26 +104,18 @@ export default {
         });
         const uploadJson = await uploadRes.json().catch(() => null);
         const pageUrl = uploadJson?.data?.url || uploadJson?.url || null;
-        const directUrl = pageUrl
-          ? pageUrl.replace("://tmpfiles.org/", "://tmpfiles.org/dl/")
-          : null;
-        if (!uploadRes.ok || !uploadJson || !directUrl) {
+        if (!uploadRes.ok || !uploadJson || !pageUrl) {
           return json({ ok: false, error: "Temporary upload failed" }, 502, corsHeaders);
         }
 
-        let tempDownloadUrl;
-        try {
-          tempDownloadUrl = new URL(directUrl);
-        } catch {
-          return json({ ok: false, error: "Temporary upload returned an invalid download URL" }, 502, corsHeaders);
-        }
-
-        if (
-          tempDownloadUrl.protocol !== "https:" ||
-          tempDownloadUrl.hostname !== "tmpfiles.org" ||
-          !tempDownloadUrl.pathname.startsWith("/dl/")
-        ) {
-          return json({ ok: false, error: "Temporary upload returned an unexpected download URL" }, 502, corsHeaders);
+        const directUrl = await getTmpfilesDownloadUrl(pageUrl);
+        const downloadValidation = await validateTemporaryDocxDownload(directUrl);
+        if (!downloadValidation.valid) {
+          return json(
+            { ok: false, error: "Temporary upload did not produce a valid DOCX download", details: downloadValidation.errors },
+            502,
+            corsHeaders
+          );
         }
 
         const owner = env.GITHUB_OWNER;
@@ -214,6 +206,93 @@ function json(obj, status, headers) {
     status,
     headers: { "Content-Type": "application/json", ...headers },
   });
+}
+
+async function getTmpfilesDownloadUrl(pageUrl) {
+  let uploadPageUrl;
+  try {
+    uploadPageUrl = new URL(pageUrl);
+  } catch {
+    throw new Error("Temporary upload returned an invalid page URL");
+  }
+
+  if (uploadPageUrl.protocol !== "https:" || uploadPageUrl.hostname !== "tmpfiles.org") {
+    throw new Error("Temporary upload returned an unexpected page URL");
+  }
+
+  const pageRes = await fetch(uploadPageUrl.toString(), {
+    headers: {
+      Accept: "text/html",
+      "User-Agent": "docx2md-worker",
+    },
+  });
+  const pageHtml = await pageRes.text();
+  if (!pageRes.ok) {
+    throw new Error("Temporary upload page could not be read");
+  }
+
+  const match = pageHtml.match(/<a[^>]+class=["'][^"']*\bdownload\b[^"']*["'][^>]+href=["']([^"']+)["']/i)
+    || pageHtml.match(/href=["'](https:\/\/tmpfiles\.org\/dl\/[^"']+)["']/i);
+  const href = match?.[1]?.replace(/&amp;/g, "&") || null;
+  if (!href) {
+    throw new Error("Temporary upload page did not contain a signed download link");
+  }
+
+  let downloadUrl;
+  try {
+    downloadUrl = new URL(href, uploadPageUrl);
+  } catch {
+    throw new Error("Temporary upload page contained an invalid download link");
+  }
+
+  if (
+    downloadUrl.protocol !== "https:" ||
+    downloadUrl.hostname !== "tmpfiles.org" ||
+    !downloadUrl.pathname.startsWith("/dl/")
+  ) {
+    throw new Error("Temporary upload page contained an unexpected download link");
+  }
+
+  return downloadUrl.toString();
+}
+
+async function validateTemporaryDocxDownload(downloadUrl) {
+  const errors = [];
+  const res = await fetch(downloadUrl, {
+    headers: {
+      Range: "bytes=0-3",
+      Accept: "application/octet-stream",
+      "User-Agent": "docx2md-worker",
+    },
+  });
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!res.ok) {
+    errors.push(`Temporary download check failed with HTTP ${res.status}`);
+  }
+  if (contentType.toLowerCase().includes("text/html")) {
+    errors.push("Temporary download check returned HTML instead of DOCX bytes");
+  }
+
+  const header = new Uint8Array(await res.arrayBuffer());
+  const isZip =
+    header.length >= 4 &&
+    header[0] === 0x50 &&
+    header[1] === 0x4b &&
+    (
+      (header[2] === 0x03 && header[3] === 0x04) ||
+      (header[2] === 0x05 && header[3] === 0x06) ||
+      (header[2] === 0x07 && header[3] === 0x08)
+    );
+
+  if (!isZip) {
+    errors.push("Temporary download check did not find a DOCX/ZIP signature");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 async function githubRequest(env, url) {
