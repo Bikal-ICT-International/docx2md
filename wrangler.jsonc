@@ -3,5 +3,10 @@
   "name": "docx2md",
   "main": "worker/index.js",
   "compatibility_date": "2026-03-30",
-  "workers_dev": true
+  "workers_dev": true,
+  "vars": {
+    "GITHUB_OWNER": "Bikal-ICT-International",
+    "GITHUB_REPO": "docx2md",
+    "GITHUB_BRANCH": "main"
+  }
 }

@@ -2,6 +2,7 @@
 /media/
 /input/
 /output/
+.wrangler/
 
 # OS
 .DS_Store

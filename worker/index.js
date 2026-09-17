@@ -27,35 +27,17 @@ const VALIDATION_CONFIG = {
   SAFE_CHARS_PATTERN: /^[a-zA-Z0-9._\- ]+$/,
 };
 
-// ============================================================================
-// SECURITY: Periodic Cleanup (runs weekly in Cloudflare)
-// ============================================================================
-setInterval(() => {
-  const now = Date.now();
-  const maxWindow = Math.max(...Object.values(RATE_LIMITS).map(r => r.window)) * 1000;
-
-  for (const [key, timestamps] of rateLimitStore.entries()) {
-    const recentTimestamps = timestamps.filter(t => now - t < maxWindow);
-    if (recentTimestamps.length === 0) {
-      rateLimitStore.delete(key);
-    } else {
-      rateLimitStore.set(key, recentTimestamps);
-    }
-  }
-}, 3600000); // Run every hour
-
 export default {
   async fetch(request, env) {
     const { method, url } = request;
     const { pathname } = new URL(url);
+    const corsHeaders = getCorsHeaders(request);
 
     if (method === "OPTIONS") {
-      const corsHeaders = getCorsHeaders(request);
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
     try {
-      const corsHeaders = getCorsHeaders(request);
       const ip = request.headers.get('cf-connecting-ip') || 'unknown';
 
       // ✅ Security Check: Rate Limit
@@ -305,6 +287,8 @@ function checkRateLimit(ip, endpoint) {
 
   if (!limit) return true;
 
+  cleanupRateLimitStore(now);
+
   // Get stored timestamps for this IP:endpoint
   let timestamps = rateLimitStore.get(key) || [];
 
@@ -322,6 +306,19 @@ function checkRateLimit(ip, endpoint) {
   rateLimitStore.set(key, recentTimestamps);
 
   return true;  // OK
+}
+
+function cleanupRateLimitStore(now) {
+  const maxWindow = Math.max(...Object.values(RATE_LIMITS).map(r => r.window)) * 1000;
+
+  for (const [key, timestamps] of rateLimitStore.entries()) {
+    const recentTimestamps = timestamps.filter(t => now - t < maxWindow);
+    if (recentTimestamps.length === 0) {
+      rateLimitStore.delete(key);
+    } else if (recentTimestamps.length !== timestamps.length) {
+      rateLimitStore.set(key, recentTimestamps);
+    }
+  }
 }
 
 /**
