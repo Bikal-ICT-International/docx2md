@@ -20,10 +20,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repo (needed for Lua filters)
+        uses: actions/checkout@v4
+
       - name: Install pandoc
         run: |
           sudo apt-get update
           sudo apt-get install -y pandoc
+          pandoc --version
 
       - name: Download DOCX
         shell: bash
@@ -32,10 +36,101 @@ jobs:
           DOCX_NAME: ${{ inputs.docx_name }}
         run: |
           set -euo pipefail
-          mkdir -p input
-          curl -L "$DOCX_URL" -o "input/$DOCX_NAME"
+          mkdir -p input diagnostics
+
+          docx_path="input/$DOCX_NAME"
+          headers_path="diagnostics/download-headers.txt"
+          unzip_log="diagnostics/unzip-test.log"
+
+          echo "Downloading DOCX from temporary upload URL..."
+          http_code="$(
+            curl -L \
+              --fail-with-body \
+              --retry 4 \
+              --retry-delay 3 \
+              --retry-all-errors \
+              --connect-timeout 20 \
+              --max-time 180 \
+              --user-agent "Mozilla/5.0 docx2md-converter" \
+              --dump-header "$headers_path" \
+              --write-out "%{http_code}" \
+              --output "$docx_path" \
+              "$DOCX_URL"
+          )"
+
+          byte_count="$(wc -c < "$docx_path" | tr -d ' ')"
+          echo "Download HTTP status: $http_code"
+          echo "Downloaded bytes: $byte_count"
+          echo "Response header summary:"
+          grep -iE '^(content-type|content-length|content-disposition):' "$headers_path" | tail -10 || true
+          echo "Detected file type:"
+          file "$docx_path" || true
+
+          if [ ! -s "$docx_path" ]; then
+            echo "::error::Temporary download returned an empty file."
+            exit 63
+          fi
+
+          if ! unzip -t "$docx_path" > "$unzip_log" 2>&1; then
+            echo "::error::Temporary download is not a valid DOCX/ZIP archive. The temporary URL likely returned HTML, JSON, an error page, or truncated bytes."
+            echo "Unzip validation output:"
+            cat "$unzip_log" || true
+            exit 63
+          fi
+
+          if ! unzip -l "$docx_path" | grep -q 'word/document.xml'; then
+            echo "::error::Downloaded ZIP is not a Word DOCX package; word/document.xml was not found."
+            unzip -l "$docx_path" | sed -n '1,80p' || true
+            exit 63
+          fi
+
+          echo "DOCX download validated successfully."
 
       - name: Convert DOCX
+        shell: bash
+        env:
+          DOCX_NAME: ${{ inputs.docx_name }}
+          DOCX2MD_DEBUG_TABLES: "1"
+          DOCX2MD_FORCE_HTML_TABLES: "1"
+        run: |
+          set -euo pipefail
+          base="$(basename "$DOCX_NAME" .docx)"
+          outdir="output/$base"
+          tmpdir="$outdir/tmp_media"
+          mkdir -p "$outdir"
+
+          # Extract to temp folder (pandoc creates media/ subfolder automatically)
+          # Use --preserve-tabs and other options to retain original formatting
+          pandoc -f docx -t gfm \
+            --extract-media="$tmpdir" \
+            --preserve-tabs \
+            --wrap=preserve \
+            --lua-filter="tools/filters/merged-table-html.lua" \
+            "input/$DOCX_NAME" \
+            -o "$outdir/$base.md"
+
+          # Convert to HTML with native table handling and formatting preservation
+          pandoc -f docx -t html5 \
+            --extract-media="$tmpdir" \
+            --standalone \
+            "input/$DOCX_NAME" \
+            -o "$outdir/$base.html"
+
+          # Move all images from tmp_media/media/ to images/
+          mkdir -p "$outdir/images"
+          if [ -d "$tmpdir/media" ]; then
+            mv "$tmpdir/media"/* "$outdir/images/" 2>/dev/null || true
+            rm -rf "$tmpdir"
+          fi
+
+          # Verify images were extracted
+          if [ -z "$(ls -A $outdir/images 2>/dev/null)" ]; then
+            echo "Warning: No images were extracted from the DOCX file"
+          else
+            echo "Images extracted successfully to images/ folder"
+          fi
+
+      - name: Generate Markdown + HTML version
         shell: bash
         env:
           DOCX_NAME: ${{ inputs.docx_name }}
@@ -43,27 +138,37 @@ jobs:
           set -euo pipefail
           base="$(basename "$DOCX_NAME" .docx)"
           outdir="output/$base"
-          tmpdir="$outdir/tmp_media"
-          mkdir -p "$outdir"
-          
-          # Extract to temp folder (pandoc creates media/ subfolder automatically)
-          pandoc -f docx -t gfm \
+          htmlmdfile="$outdir/$base.html.md"
+
+          tmpdir="$outdir/tmp_media_html"
+
+          echo "Generating Markdown + HTML pass 1 (DOCX -> Markdown with merge-preserved tables)..."
+          pandoc -f docx -t gfm+raw_html \
             --extract-media="$tmpdir" \
+            --preserve-tabs \
+            --wrap=preserve \
+            --lua-filter="tools/filters/merged-table-html.lua" \
             "input/$DOCX_NAME" \
-            -o "$outdir/$base.md"
-          
-          # Move all images from tmp_media/media/ to images/
-          mkdir -p "$outdir/images"
+            -o "$htmlmdfile"
+
+          echo "Generating Markdown + HTML pass 2 (force remaining Markdown tables/images to HTML)..."
+          pandoc -f gfm+raw_html -t gfm+raw_html \
+            --wrap=preserve \
+            --lua-filter="tools/filters/html-images-tables.lua" \
+            "$htmlmdfile" \
+            -o "$htmlmdfile.tmp"
+          mv "$htmlmdfile.tmp" "$htmlmdfile"
+
+          # Cleanup extra tmp media folder if created
           if [ -d "$tmpdir/media" ]; then
-            mv "$tmpdir/media"/* "$outdir/images/" 2>/dev/null || true
             rm -rf "$tmpdir"
           fi
-          
-          # Verify images were extracted
-          if [ -z "$(ls -A $outdir/images 2>/dev/null)" ]; then
-            echo "Warning: No images were extracted from the DOCX file"
+
+          echo "HTML-enhanced Markdown version created"
+          if grep -qi "<table" "$htmlmdfile"; then
+            echo "Verified: HTML tables detected in $htmlmdfile"
           else
-            echo "Images extracted successfully to images/ folder"
+            echo "Warning: No <table> tags found in $htmlmdfile"
           fi
 
       - name: Rename images to DDMMYY format
@@ -76,61 +181,107 @@ jobs:
           outdir="output/$base"
           imgdir="$outdir/images"
           mdfile="$outdir/$base.md"
-          
+          htmlfile="$outdir/$base.html"
+          htmlmdfile="$outdir/$base.html.md"
+
           # Get today's date in DDMMYY format
           datestr=$(date +%d%m%y)
           counter=0
-          
+
           echo "Processing images in: $imgdir"
           echo "Markdown file: $mdfile"
-          
+
           # List current images
           if [ -d "$imgdir" ]; then
             echo "Current images:"
             ls -la "$imgdir" || echo "Error listing images"
-          else
-            echo "Images directory does not exist!"
           fi
-          
+
           # Process all images - rename and update markdown
           if [ -d "$imgdir" ]; then
-            # Use find to handle all files safely
-            find "$imgdir" -maxdepth 1 -type f | sort | while read -r file; do
+            find "$imgdir" -maxdepth 1 -type f ! -name ".*" | sort | while read -r file; do
               oldname=$(basename "$file")
               ext="${file##*.}"
               newname="image${datestr}$(printf %03d $counter).$ext"
-              
-              echo "Processing: $oldname -> $newname"
-              
-              # Rename the file
+
+              echo "Renaming: $oldname -> $newname"
               mv "$file" "$imgdir/$newname"
-              
-              # Update markdown - handle various formats
+
+              # Update markdown with new filename
               if [ -f "$mdfile" ]; then
                 sed -i "s|$oldname|$newname|g" "$mdfile"
-                sed -i "s|media/$oldname|$newname|g" "$mdfile"
-                sed -i "s|images/images/$oldname|$newname|g" "$mdfile"
               fi
-              
+
+              # Update HTML with new filename
+              if [ -f "$htmlfile" ]; then
+                sed -i "s|$oldname|$newname|g" "$htmlfile"
+              fi
+
+              # Update HTML-markdown with new filename
+              if [ -f "$htmlmdfile" ]; then
+                sed -i "s|$oldname|$newname|g" "$htmlmdfile"
+              fi
+
               counter=$((counter + 1))
             done
           fi
-          
-          # Final cleanup of markdown references - use relative paths for sibling folder
+
+          # Final pass: normalize all image paths to consistent format: images/filename.png
           if [ -f "$mdfile" ]; then
-            # Replace all absolute paths with relative paths (go up one level to access images/)
-            sed -i 's|output/[^/]*/tmp_images/|../images/|g' "$mdfile"
-            sed -i 's|output/[^/]*/images/|../images/|g' "$mdfile"
-            sed -i 's|media/|../images/|g' "$mdfile"
-            sed -i 's|../images/images/|../images/|g' "$mdfile"
+            echo "Normalizing image paths in markdown..."
+
+            # Create a temp file
+            temp_md="${mdfile}.tmp"
+            cp "$mdfile" "$temp_md"
+
+            # Use awk to process each image reference
+            awk '
+            {
+              # Match markdown image syntax ![alt](path)
+              if (match($0, /!\[[^\]]*\]\([^)]+\)/)) {
+                # Extract and process the image path
+                img_ref = substr($0, RSTART, RLENGTH)
+
+                # Extract the path part (everything between ( and ))
+                match(img_ref, /\]\(([^)]+)\)/, path_cap)
+                old_path = path_cap[1]
+
+                # Extract just the filename
+                split(old_path, parts, "/")
+                filename = parts[length(parts)]
+
+                # Replace with normalized path
+                new_path = "images/" filename
+                gsub(/\)$/, ")", new_path)  # Ensure trailing paren
+
+                # Replace in the line
+                gsub(/\]\([^)]+\)/, "](" new_path ")", $0)
+              }
+              print
+            }
+            ' "$temp_md" > "$mdfile"
+
+            rm "$temp_md"
+            echo "Image paths normalized"
           fi
-          
+
+          # Normalize image paths in HTML-markdown to images/filename
+          if [ -f "$htmlmdfile" ]; then
+            echo "Normalizing image paths in HTML-markdown..."
+            # Normalize markdown image links to images/<filename>
+            sed -E -i 's|(!\[[^]]*\]\()([^)]*/)?([^)/]+)(\))|\1images/\3\4|g' "$htmlmdfile"
+            # Normalize HTML image src paths to images/<filename>
+            sed -E -i 's|(src=")([^"]*/)?([^/"[:space:]]+)(")|\1images/\3\4|g' "$htmlmdfile"
+            echo "HTML-markdown image paths normalized"
+          fi
+
           echo "Image processing complete"
-          echo "Final images:"
-          ls -la "$imgdir" 2>/dev/null || echo "No images in directory"
+          echo "Sample image references from markdown:"
+          grep -o '!\[[^]]*\]\(images/[^)]*\)' "$mdfile" 2>/dev/null | head -3 || echo "No image references found"
 
       - name: Upload outputs as artifact
         uses: actions/upload-artifact@v4
         with:
           name: markdown-and-media
           path: output
+          retention-days: 1
